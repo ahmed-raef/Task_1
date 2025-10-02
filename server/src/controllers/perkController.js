@@ -69,7 +69,48 @@ export async function createPerk(req, res, next) {
 }
 // TODO
 // Update an existing perk by ID and validate only the fields that are being updated 
+// Derived schema for updates: all fields optional
+const perkUpdateSchema = Joi.object({
+  title: Joi.string().min(2),
+  description: Joi.string(),
+  category: Joi.string().valid('food','tech','travel','fitness','other'),
+  discountPercent: Joi.number().min(0).max(100),
+  merchant: Joi.string()
+});
+
 export async function updatePerk(req, res, next) {
+ try {
+      // Validate only provided fields, no defaults - this is correct
+    const { value, error } = perkUpdateSchema.validate(req.body, { stripUnknown: true });
+    if (error) return res.status(400).json({ message: error.message });
+
+    // Only update fields that were actually provided in the request
+    const updateData = {};
+    if (value.title !== undefined) updateData.title = value.title;
+    if (value.description !== undefined) updateData.description = value.description;
+    if (value.category !== undefined) updateData.category = value.category;
+    if (value.discountPercent !== undefined) updateData.discountPercent = value.discountPercent;
+    if (value.merchant !== undefined) updateData.merchant = value.merchant;
+
+    // If no valid fields to update, return error
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    const doc = await Perk.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData }, 
+      { new: true, runValidators: true }
+    );
+
+    if (!doc) return res.status(404).json({ message: 'Perk not found' });
+
+    res.json({ perk: doc });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ message: 'Duplicate perk for this merchant' });
+    next(err);
+  }
+
   
 }
 
